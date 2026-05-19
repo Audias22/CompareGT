@@ -1,0 +1,23 @@
+# Environment
+.env
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code
+.claude/
+
+# Runtime/generated files
+alerts.json
+report.md
+knowledge/
+
+# Lock files
+uv.lock
+
+# OS files
+.DS_Store
+Thumbs.db

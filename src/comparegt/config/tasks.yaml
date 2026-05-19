@@ -1,0 +1,92 @@
+# ============================================
+# CompareGT - Tareas de los Agentes
+# ============================================
+
+emparejamiento_productos:
+  description: >
+    Recibís esta lista de productos ya scrapeados de las tiendas guatemaltecas:
+
+    {productos_scrapeados}
+
+    Tu tarea es encontrar cuáles son el mismo producto vendido en diferentes tiendas.
+
+    Criterios de emparejamiento:
+    1. PRIORIDAD ALTA: Número de modelo idéntico (ej: "fc0276la" en dos tiendas).
+    2. PRIORIDAD MEDIA: Marca + procesador + RAM + almacenamiento + pantalla coinciden.
+    3. PRIORIDAD BAJA: Marca + características generales similares.
+
+    Nivel de confianza:
+    - ALTA: número de modelo exacto coincide
+    - MEDIA: 3+ especificaciones coinciden
+    - BAJA: solo marca y tipo coinciden
+
+    IMPORTANTE: En el output, cada entrada de all_prices DEBE incluir el campo "url"
+    con la URL directa del producto tal como vino del input. No omitir este campo.
+  expected_output: >
+    Una lista JSON de grupos de productos emparejados.
+    Ejemplo:
+    [
+      {
+        "match_id": 1,
+        "confidence": "ALTA",
+        "reason": "Número de modelo fc0276la coincide",
+        "products": [
+          {
+            "store": "MAX",
+            "name": "Laptop HP 15-fc0276la...",
+            "price": 6499.00,
+            "available": true,
+            "url": "https://max.com.gt/producto/hp-15-fc0276la"
+          },
+          {
+            "store": "Tecno Fácil",
+            "name": "HP 15 fc0276la Ryzen 7...",
+            "price": 5199.00,
+            "available": true,
+            "url": "https://tecnofacil.com.gt/producto/hp-15"
+          }
+        ]
+      }
+    ]
+  agent: emparejador
+
+analisis_precios:
+  description: >
+    Analizar los productos emparejados y generar un reporte comparativo completo.
+
+    REGLA CRÍTICA: Solo podés mencionar productos que estén en la lista de productos
+    emparejados que recibiste. NUNCA menciones productos que no aparezcan en esa lista.
+    No uses conocimiento propio sobre marcas, modelos o precios — solo los datos recibidos.
+
+    Para cada grupo de productos emparejados:
+    1. Identificar la tienda con el mejor precio
+    2. Calcular la diferencia de precio entre la más cara y la más barata
+    3. Verificar disponibilidad en cada tienda
+    4. Considerar el presupuesto del usuario: '{budget}'
+    5. Considerar el tipo de uso: '{use_type}'
+
+    La recomendación final debe:
+    - Mencionar únicamente los productos presentes en los datos recibidos
+    - Citar precios exactos tal como aparecen en los datos
+    - Si solo hay 2 productos emparejados, hablar solo de esos 2
+
+    IMPORTANTE: En el output, cada entrada de all_prices DEBE incluir el campo "url"
+    copiado exactamente del input recibido.
+  expected_output: >
+    Un reporte JSON con el análisis y una recomendación en texto natural.
+    {
+      "comparisons": [
+        {
+          "product": "HP 15-fc0276la Ryzen 7 16GB 1TB",
+          "best_price": {"store": "Tecno Fácil", "price": 5199.00},
+          "worst_price": {"store": "MAX", "price": 6499.00},
+          "savings": 1300.00,
+          "all_prices": [
+            {"store": "MAX", "price": 6499.00, "available": true, "url": "https://..."},
+            {"store": "Tecno Fácil", "price": 5199.00, "available": true, "url": "https://..."}
+          ]
+        }
+      ],
+      "recommendation": "Te recomiendo comprar la HP 15-fc0276la en Tecno Fácil por Q5,199..."
+    }
+  agent: analista
