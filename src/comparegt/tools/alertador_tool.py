@@ -11,7 +11,7 @@ from crewai.tools import tool
 
 # alerts.json vive en la raíz del proyecto (4 niveles arriba de este archivo)
 _ALERTS_FILE = Path(__file__).resolve().parent.parent.parent.parent / "alerts.json"
-_MIN_PCT_DROP = 5.0
+_MIN_PCT_DROP = 3.0
 
 
 def _load_alerts() -> list:
@@ -38,6 +38,7 @@ def registrar_alerta(
     new_price: float,
     category: str,
     brand: str,
+    url: str = "",
 ) -> str:
     """
     Registra una bajada de precio en alerts.json.
@@ -51,6 +52,7 @@ def registrar_alerta(
         new_price: Precio más bajo encontrado (mejor precio entre tiendas).
         category:  Categoría del producto (ej: laptops).
         brand:     Marca del producto (ej: HP).
+        url:       URL directa del producto en la tienda.
 
     Returns:
         JSON confirmando si se registró la alerta o indicando el motivo por el que no.
@@ -93,6 +95,7 @@ def registrar_alerta(
         "pct_drop":  round(pct_drop, 1),
         "category":  category,
         "brand":     brand,
+        "url":       url,
     }
 
     alerts.append(alert)

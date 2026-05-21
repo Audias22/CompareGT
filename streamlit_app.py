@@ -55,7 +55,13 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 *,body,.stApp{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important}
-.stApp{background:#080C14!important}
+            .stApp{
+    background:#0f172a!important;
+    background-image:
+        linear-gradient(to right,#4f4f4f2e 1px,transparent 1px),
+        linear-gradient(to bottom,#4f4f4f2e 1px,transparent 1px)!important;
+    background-size:14px 24px!important;
+}
 [data-testid="collapsedControl"]{display:none!important}
 [data-testid="stSidebar"]{display:none!important}
 .main .block-container{padding:1.5rem 2.5rem 2rem;max-width:1100px;background:#080C14}
@@ -233,7 +239,12 @@ details[data-testid="stExpander"]{
     border-radius:10px!important;margin-bottom:6px!important;
 }
 [data-testid="stExpanderDetails"]{background:#080C14!important}
-summary[data-testid="stExpanderToggle"]{color:#F0F6FF!important;font-weight:600!important}
+summary[data-testid="stExpanderToggle"]{
+    color:#F0F6FF!important;font-weight:600!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    padding-left:16px!important;
+}
 
 /* ── Alerts ── */
 [data-testid="stAlert"]{background:#0F1923!important;border-radius:10px!important}
@@ -418,6 +429,54 @@ def _filter_by_budget(comparisons: list, budget_str: str) -> list:
             if lo <= c.get("best_price", {}).get("price", 0) <= hi]
 
 
+
+def _validate_comparisons(data: dict | None) -> dict | None:
+    """Descarta comparisons alucinados por el LLM.
+    - Elimina comparisons donde algún precio es 0 o negativo.
+    - Elimina comparisons donde el nombre del producto está vacío.
+    - Recalcula best_price, worst_price y savings desde all_prices reales.
+    """
+    if not data or "comparisons" not in data:
+        return data
+
+    cleaned = []
+    for comp in data["comparisons"]:
+        all_prices = comp.get("all_prices", [])
+        if not all_prices:
+            continue
+        # Descartar si algún precio no es numérico positivo
+        valid_prices = [
+            e for e in all_prices
+            if isinstance(e.get("price"), (int, float)) and e["price"] > 0
+        ]
+        if not valid_prices:
+            continue
+        # Descartar si no tiene nombre de producto
+        product_name = comp.get("product", "").strip()
+        if not product_name:
+            continue
+
+        # Recalcular best/worst/savings desde los datos reales
+        avail = [e for e in valid_prices if e.get("available", True)]
+        all_p = [e["price"] for e in valid_prices]
+
+        if avail:
+            best_entry = min(avail, key=lambda x: x["price"])
+            comp["best_price"] = {"store": best_entry["store"], "price": best_entry["price"]}
+        else:
+            cheapest = min(valid_prices, key=lambda x: x["price"])
+            comp["best_price"] = {"store": cheapest["store"], "price": cheapest["price"]}
+
+        most_expensive = max(valid_prices, key=lambda x: x["price"])
+        comp["worst_price"] = {"store": most_expensive["store"], "price": most_expensive["price"]}
+        comp["savings"] = max(all_p) - min(all_p) if len(all_p) >= 2 else 0
+        comp["all_prices"] = valid_prices
+        cleaned.append(comp)
+
+    data["comparisons"] = cleaned
+    return data if cleaned else data
+
+
 def _h(text: str) -> str:
     """HTML-escape básico."""
     return (str(text)
@@ -537,6 +596,29 @@ def _store_search_url(store: str, product_name: str) -> str:
     return ""
 
 
+STORE_DOMAINS = {
+    "pacifiko": "https://www.pacifiko.com",
+    "max":      "https://www.max.com.gt",
+    "tecno":    "https://www.tecnofacil.com.gt",
+    "click":    "https://click.gt",
+    "macro":    "https://www.macrosistemas.com",
+}
+
+
+def _normalize_url(url: str, store: str) -> str:
+    """Si la URL es relativa (no empieza con http), antepone el dominio de la tienda."""
+    url = url.strip()
+    if not url:
+        return ""
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    store_l = store.lower()
+    for key, domain in STORE_DOMAINS.items():
+        if key in store_l:
+            return domain + (url if url.startswith("/") else "/" + url)
+    return url
+
+
 def _pivot_table_html(comparisons: list) -> tuple:
     """
     Tabla pivoteada: columnas = tiendas.
@@ -609,7 +691,7 @@ def _pivot_table_html(comparisons: list) -> tuple:
                 price = e.get("price", 0)
                 avail = e.get("available", True)
 
-                direct_url = e.get("url", "").strip()
+                direct_url = _normalize_url(e.get("url", ""), s)
                 cell_url = direct_url if direct_url else _store_search_url(s, raw_product)
 
                 if not avail:
@@ -654,6 +736,7 @@ def _pivot_table_html(comparisons: list) -> tuple:
 
     html = (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        '<base target="_blank">'
         '<style>'
         'body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}'
         'table{width:100%;border-collapse:collapse;'
@@ -904,7 +987,8 @@ elif _step == 6:
     _raw = st.session_state.result_holder.get("result")
 
     st.session_state.error_msg    = _err
-    st.session_state.result_data  = _parse_crew_output(_raw) if not _err else None
+    _parsed = _parse_crew_output(_raw) if not _err else None
+    st.session_state.result_data  = _validate_comparisons(_parsed) if _parsed else None
     st.session_state.crew_started = False
     st.session_state.step         = 7
     st.rerun()
@@ -1021,9 +1105,11 @@ elif _step == 7:
             )
             for _pi, _comp in enumerate(_comparisons):
                 _pname  = _comp.get("product", f"Producto {_pi + 1}")
+                # Truncar nombre si es muy largo para evitar overlap en expander
+                _pname_short = _pname[:55] + "..." if len(_pname) > 55 else _pname
                 _pbest  = _comp.get("best_price", {})
                 _psav   = _comp.get("savings", 0)
-                _label  = f"**{_pname}** — mejor: Q{_pbest.get('price', 0):,.0f} en {_pbest.get('store', '')}"
+                _label  = f"{_pname_short} | Q{_pbest.get('price', 0):,.0f} en {_pbest.get('store', '')}"
                 if _psav > 0:
                     _label += f" (ahorro Q{_psav:,.0f})"
 
@@ -1038,15 +1124,40 @@ elif _step == 7:
                         _es  = _pe.get("store", "")
                         _ep  = _pe.get("price", 0)
                         _ea  = _pe.get("available", True)
-                        _eu  = _pe.get("url", "").strip()
+                        _eu  = _normalize_url(_pe.get("url", ""), _es)
                         _is_best = _min_p is not None and abs(_ep - _min_p) < 0.01 and _ea
-                        _link_txt = f" — [ver en tienda]({_eu})" if _eu else ""
+                        _link_html = (
+                            f' — <a href="{_eu}" target="_blank" '
+                            f'style="color:#00B4D8;text-decoration:underline;">ver en tienda</a>'
+                            if _eu else ""
+                        )
                         if not _ea:
-                            st.warning(f"⚠️ **{_es}**: Q{_ep:,.0f} — Agotado")
+                            st.markdown(
+                                f'<div style="background:rgba(214,40,40,0.08);border:1px solid rgba(214,40,40,0.25);'
+                                f'border-radius:8px;padding:10px 14px;margin-bottom:6px;">'
+                                f'<span style="color:#FF6B6B;font-weight:600;">⚠️ {_h(_es)}</span>'
+                                f'<span style="color:#6B8CAE;"> — Q{_ep:,.0f} — Agotado</span></div>',
+                                unsafe_allow_html=True,
+                            )
                         elif _is_best:
-                            st.success(f"⭐ **{_es}**: Q{_ep:,.0f} — Disponible ← MEJOR PRECIO{_link_txt}")
+                            st.markdown(
+                                f'<div style="background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);'
+                                f'border-radius:8px;padding:10px 14px;margin-bottom:6px;">'
+                                f'<span style="color:#00E676;font-weight:700;">⭐ {_h(_es)}</span>'
+                                f'<span style="color:#F0F6FF;font-weight:600;"> — Q{_ep:,.0f} — Disponible</span>'
+                                f'<span style="color:#00E676;font-weight:700;"> ← MEJOR PRECIO</span>'
+                                f'{_link_html}</div>',
+                                unsafe_allow_html=True,
+                            )
                         else:
-                            st.info(f"📌 **{_es}**: Q{_ep:,.0f} — Disponible{_link_txt}")
+                            st.markdown(
+                                f'<div style="background:rgba(0,180,216,0.06);border:1px solid rgba(0,180,216,0.2);'
+                                f'border-radius:8px;padding:10px 14px;margin-bottom:6px;">'
+                                f'<span style="color:#00B4D8;font-weight:600;">📌 {_h(_es)}</span>'
+                                f'<span style="color:#F0F6FF;"> — Q{_ep:,.0f} — Disponible</span>'
+                                f'{_link_html}</div>',
+                                unsafe_allow_html=True,
+                            )
 
             # ── Alertador en background ───────────────────────────────────────
             if not st.session_state.alertador_started:
@@ -1123,7 +1234,7 @@ elif _step == 7:
                 f'flex-wrap:wrap;gap:6px;">'
                 f'<div>'
                 f'<span style="font-weight:600;font-size:0.88rem;color:#F0F6FF;">'
-                f'{_h(_al.get("product",""))}</span><br>'
+                f'{_h(_al.get("product",""))}{(" — <a href=" + chr(34) + _normalize_url(_al.get("url",""), _al.get("store","")) + chr(34) + " target=" + chr(34) + "_blank" + chr(34) + " style=" + chr(34) + "color:#00B4D8;text-decoration:underline;" + chr(34) + ">ver en tienda</a>") if _al.get("url") else ""}</span><br>'
                 f'<span style="font-size:0.78rem;color:#6B8CAE;">'
                 f'Mejor precio en <b style="color:#F0F6FF">{_h(_al.get("store",""))}</b> — '
                 f'<span style="text-decoration:line-through;color:#6B8CAE;">'
@@ -1151,6 +1262,6 @@ elif _step == 7:
 # ── Footer ─────────────────────────────────────────────────────────────────────
 
 st.markdown(
-    '<div class="cgt-footer">CompareGT • Universidad Mariano Gálvez de Guatemala</div>',
+    '<div class="cgt-footer">CompareGT •</div>',
     unsafe_allow_html=True,
 )

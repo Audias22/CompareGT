@@ -8,20 +8,35 @@ emparejamiento_productos:
 
     {productos_scrapeados}
 
-    Tu tarea es encontrar cuáles son el mismo producto vendido en diferentes tiendas.
+    Tu tarea es encontrar cuáles son el MISMO producto EXACTO vendido en diferentes tiendas.
 
-    Criterios de emparejamiento:
-    1. PRIORIDAD ALTA: Número de modelo idéntico (ej: "fc0276la" en dos tiendas).
-    2. PRIORIDAD MEDIA: Marca + procesador + RAM + almacenamiento + pantalla coinciden.
-    3. PRIORIDAD BAJA: Marca + características generales similares.
+    REGLAS DE EMPAREJAMIENTO (seguir en orden estricto):
 
-    Nivel de confianza:
-    - ALTA: número de modelo exacto coincide
-    - MEDIA: 3+ especificaciones coinciden
-    - BAJA: solo marca y tipo coinciden
+    1. REGLA DE ORO — Número de modelo:
+       Si dos productos comparten un código de modelo idéntico (ej: "fc0276la", "GF63", "B5402C"),
+       SON el mismo producto. Agruparlos con confianza ALTA.
 
-    IMPORTANTE: En el output, cada entrada de all_prices DEBE incluir el campo "url"
+    2. REGLA DE COINCIDENCIA TÉCNICA:
+       Si NO hay número de modelo visible, solo agrupar si coinciden TODOS estos:
+       - Misma marca exacta
+       - Mismo procesador (ej: Ryzen 7 7730U = Ryzen 7 7730U)
+       - Misma RAM (ej: 16GB = 16GB)
+       - Mismo almacenamiento (ej: 1TB SSD = 1TB SSD)
+       Confianza: MEDIA.
+
+    3. PROHIBICIONES — NUNCA agrupar si:
+       - Los números de modelo son DIFERENTES (ej: "fc0276la" vs "fd0245la" son productos distintos)
+       - Las líneas de producto son diferentes (ej: "HP Omen" vs "HP 15" vs "HP Victus" son líneas distintas)
+       - Las especificaciones clave difieren (ej: 8GB RAM vs 16GB RAM, o i5 vs i7)
+       - Solo coincide la marca (ej: dos laptops HP con specs diferentes NO son el mismo producto)
+
+    4. PRODUCTOS SIN MATCH:
+       Si un producto no tiene equivalente en otra tienda, incluirlo como grupo individual
+       con un solo producto. NO forzar agrupaciones.
+
+    IMPORTANTE: En el output, cada producto DEBE incluir el campo "url"
     con la URL directa del producto tal como vino del input. No omitir este campo.
+
   expected_output: >
     Una lista JSON de grupos de productos emparejados.
     Ejemplo:
@@ -29,7 +44,7 @@ emparejamiento_productos:
       {
         "match_id": 1,
         "confidence": "ALTA",
-        "reason": "Número de modelo fc0276la coincide",
+        "reason": "Número de modelo fc0276la coincide en ambas tiendas",
         "products": [
           {
             "store": "MAX",
@@ -46,34 +61,53 @@ emparejamiento_productos:
             "url": "https://tecnofacil.com.gt/producto/hp-15"
           }
         ]
+      },
+      {
+        "match_id": 2,
+        "confidence": "SOLO_UNA_TIENDA",
+        "reason": "Solo encontrado en Click, sin equivalente en otras tiendas",
+        "products": [
+          {
+            "store": "Click",
+            "name": "HP Victus 15-fa1032la...",
+            "price": 8999.00,
+            "available": true,
+            "url": "https://click.gt/producto/hp-victus"
+          }
+        ]
       }
     ]
   agent: emparejador
 
 analisis_precios:
   description: >
-    Analizar los productos emparejados y generar un reporte comparativo completo.
+    Analizar los productos emparejados y generar un reporte comparativo.
 
-    REGLA CRÍTICA: Solo podés mencionar productos que estén en la lista de productos
-    emparejados que recibiste. NUNCA menciones productos que no aparezcan en esa lista.
-    No uses conocimiento propio sobre marcas, modelos o precios — solo los datos recibidos.
+    REGLAS ABSOLUTAS:
+    - SOLO podés usar los datos que recibiste del Emparejador. NADA más.
+    - NUNCA inventes productos, precios, tiendas o datos que no estén en el input.
+    - NUNCA uses tu conocimiento propio sobre marcas, modelos o precios.
+    - Si el input tiene 3 productos, tu output tiene EXACTAMENTE 3 comparisons. Ni más, ni menos.
+    - Cada precio en tu output DEBE existir exactamente igual en el input.
 
     Para cada grupo de productos emparejados:
-    1. Identificar la tienda con el mejor precio
-    2. Calcular la diferencia de precio entre la más cara y la más barata
+    1. Identificar la tienda con el mejor precio (precio más bajo donde available=true)
+    2. Calcular savings = precio más alto - precio más bajo (usando TODOS los precios, no solo available=true)
     3. Verificar disponibilidad en cada tienda
     4. Considerar el presupuesto del usuario: '{budget}'
     5. Considerar el tipo de uso: '{use_type}'
 
-    La recomendación final debe:
-    - Mencionar únicamente los productos presentes en los datos recibidos
-    - Citar precios exactos tal como aparecen en los datos
-    - Si solo hay 2 productos emparejados, hablar solo de esos 2
+    Para la recomendación en texto:
+    - Mencionar SOLO productos que están en tus comparisons
+    - Citar precios EXACTOS del input (no redondear, no inventar)
+    - Si solo hay 1 o 2 grupos, hablar solo de esos
+    - Ser conciso: 2-4 oraciones máximo
 
     IMPORTANTE: En el output, cada entrada de all_prices DEBE incluir el campo "url"
-    copiado exactamente del input recibido.
+    copiado exactamente del input recibido. No modificar URLs.
+
   expected_output: >
-    Un reporte JSON con el análisis y una recomendación en texto natural.
+    Un JSON con este formato exacto:
     {
       "comparisons": [
         {
@@ -87,6 +121,7 @@ analisis_precios:
           ]
         }
       ],
-      "recommendation": "Te recomiendo comprar la HP 15-fc0276la en Tecno Fácil por Q5,199..."
+      "recommendation": "Te recomiendo comprar la HP 15-fc0276la en Tecno Fácil por Q5,199. Es Q1,300 más barata que en MAX."
     }
+    IMPORTANTE: El número de objetos en "comparisons" debe ser IGUAL al número de grupos que recibiste.
   agent: analista

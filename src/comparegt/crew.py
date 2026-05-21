@@ -246,7 +246,8 @@ class CompareGTCrew:
                 f"Categoría: {category} | Marca: {brand}\n\n"
                 f"Por cada comparación con diferencia de precio, llamá a registrar_alerta con: "
                 f"product, store (de best_price.store), old_price (worst_price.price), "
-                f"new_price (best_price.price), category='{category}', brand='{brand}'."
+                f"new_price (best_price.price), category='{category}', brand='{brand}', "
+                f"url (la URL del producto en best_price, del campo 'url' en all_prices para esa tienda)."
             ),
             expected_output="Resumen de alertas registradas y descartadas.",
             agent=alertador_agent,
