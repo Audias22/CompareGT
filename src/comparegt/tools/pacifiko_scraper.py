@@ -56,6 +56,38 @@ CATEGORY_SEARCH_KEYWORDS = {
     "componentes_pc": "componentes",
 }
 
+# Palabras clave por categoría para validar que el producto pertenece a la categoría buscada
+_CAT_KEYWORDS = {
+    "laptops": ["laptop", "notebook", "portatil", "portátil", "inspiron", "victus",
+                "omen", "legion", "ideapad", "thinkpad", "pavilion", "aspire",
+                "rog", "tuf", "vivobook", "zenbook", "swift", "predator",
+                "alienware", "latitude", "precision", "xps"],
+    "monitores": ["monitor", "pantalla", "display"],
+    "audifonos": ["audifono", "audífono", "headset", "headphone", "earbuds",
+                  "earphone", "auricular"],
+    "bocinas": ["bocina", "parlante", "speaker", "soundbar", "subwoofer",
+                "charge", "flip", "go ", "clip", "partybox", "xtreme",
+                "pulse", "boombox"],
+    "teclados": ["teclado", "keyboard"],
+    "mouse": ["mouse", "ratón", "raton"],
+    "sillas_gamer": ["silla", "chair"],
+    "almacenamiento": ["ssd", "hdd", "disco duro", "memoria usb", "microsd",
+                       "pendrive", "nvme", "storage"],
+    "componentes_pc": ["tarjeta de video", "tarjeta gráfica", "gpu", "fuente de poder",
+                       "ram ddr", "procesador", "cpu", "motherboard", "placa madre",
+                       "gabinete", "cooler", "ventilador"],
+    "impresoras": ["impresora", "printer", "multifuncional", "scanner", "escáner"],
+}
+
+
+def _matches_category(name: str, category_lower: str) -> bool:
+    """Verifica si el nombre del producto contiene keywords de la categoría."""
+    keywords = _CAT_KEYWORDS.get(category_lower, [])
+    if not keywords:
+        return True
+    name_low = name.lower()
+    return any(kw in name_low for kw in keywords)
+
 
 def _parse_price(price_text: str) -> float:
     cleaned = price_text.replace("Q", "").replace("GTQ", "").replace(",", "").strip()
@@ -76,7 +108,7 @@ def _extract_cards_from_url(url: str) -> list:
         return []
 
 
-def _parse_card(card, brand_lower: str) -> dict | None:
+def _parse_card(card, brand_lower: str, category_lower: str) -> dict | None:
     """Extracts product data from a single card. Returns None if invalid."""
     try:
         name_el = card.select_one(
@@ -91,6 +123,9 @@ def _parse_card(card, brand_lower: str) -> dict | None:
         # Excluir accesorios que contienen la marca en su descripción
         name_lower = name.lower()
         if any(kw in name_lower for kw in _ACCESSORY_KEYWORDS):
+            return None
+        # Validar que pertenece a la categoría buscada
+        if not _matches_category(name, category_lower):
             return None
 
         # .price-new = precio actual de venta (descontado o regular).
@@ -161,7 +196,7 @@ def scrape_pacifiko(category: str, brand: str) -> str:
     for card in all_cards:
         if len(products) >= MAX_PRODUCTS:
             break
-        product = _parse_card(card, brand_lower)
+        product = _parse_card(card, brand_lower, category_lower)
         if product and product["name"] not in seen_names:
             seen_names.add(product["name"])
             products.append(product)

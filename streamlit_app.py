@@ -241,9 +241,20 @@ details[data-testid="stExpander"]{
 [data-testid="stExpanderDetails"]{background:#080C14!important}
 summary[data-testid="stExpanderToggle"]{
     color:#F0F6FF!important;font-weight:600!important;
+    padding-left:16px!important;
+    white-space:nowrap!important;
     overflow:hidden!important;
     text-overflow:ellipsis!important;
-    padding-left:16px!important;
+}
+summary[data-testid="stExpanderToggle"] svg{
+    display:inline-block!important;
+    vertical-align:middle!important;
+    flex-shrink:0!important;
+    overflow:visible!important;
+}
+summary[data-testid="stExpanderToggle"] span[data-testid="stExpanderIconContainer"]{
+    overflow:visible!important;
+    flex-shrink:0!important;
 }
 
 /* ── Alerts ── */
@@ -485,6 +496,18 @@ def _h(text: str) -> str:
             .replace(">", "&gt;"))
 
 
+def _clean_name(text: str) -> str:
+    """Limpia caracteres basura/no-imprimibles de nombres de productos."""
+    s = str(text)
+    # Eliminar caracteres de control y no-imprimibles (excepto espacios normales)
+    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', s)
+    # Eliminar caracteres Unicode problemáticos (marcas, combinadores, etc.)
+    s = re.sub(r'[\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]', '', s)
+    # Normalizar espacios múltiples
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
 def _run_crew(category: str, brand: str, budget: str, use_type: str):
     from comparegt.crew import kickoff_with_fallback
     return kickoff_with_fallback(inputs={
@@ -658,7 +681,7 @@ def _pivot_table_html(comparisons: list) -> tuple:
     # Filas
     rows = ""
     for ri, comp in enumerate(comparisons):
-        name = _h(comp.get("product", ""))
+        name = _h(_clean_name(comp.get("product", "")))
         all_prices = _dedup_prices(comp.get("all_prices", []))
         price_map = {e["store"]: e for e in all_prices}
         raw_product = comp.get("product", "")
@@ -1104,7 +1127,7 @@ elif _step == 7:
                 unsafe_allow_html=True,
             )
             for _pi, _comp in enumerate(_comparisons):
-                _pname  = _comp.get("product", f"Producto {_pi + 1}")
+                _pname  = _clean_name(_comp.get("product", f"Producto {_pi + 1}"))
                 # Truncar nombre si es muy largo para evitar overlap en expander
                 _pname_short = _pname[:55] + "..." if len(_pname) > 55 else _pname
                 _pbest  = _comp.get("best_price", {})

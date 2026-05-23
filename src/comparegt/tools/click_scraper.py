@@ -33,6 +33,38 @@ HEADERS = {
 
 MAX_PRODUCTS = 5
 
+# Palabras clave por categoría para validar que el producto pertenece a la categoría buscada
+_CAT_KEYWORDS = {
+    "laptops": ["laptop", "notebook", "portatil", "portátil", "inspiron", "victus",
+                "omen", "legion", "ideapad", "thinkpad", "pavilion", "aspire",
+                "rog", "tuf", "vivobook", "zenbook", "swift", "predator",
+                "alienware", "latitude", "precision", "xps"],
+    "monitores": ["monitor", "pantalla", "display"],
+    "audifonos": ["audifono", "audífono", "headset", "headphone", "earbuds",
+                  "earphone", "auricular"],
+    "bocinas": ["bocina", "parlante", "speaker", "soundbar", "subwoofer",
+                "charge", "flip", "go ", "clip", "partybox", "xtreme",
+                "pulse", "boombox"],
+    "teclados": ["teclado", "keyboard"],
+    "mouse": ["mouse", "ratón", "raton"],
+    "sillas_gamer": ["silla", "chair"],
+    "almacenamiento": ["ssd", "hdd", "disco duro", "memoria usb", "microsd",
+                       "pendrive", "nvme", "storage"],
+    "componentes_pc": ["tarjeta de video", "tarjeta gráfica", "gpu", "fuente de poder",
+                       "ram ddr", "procesador", "cpu", "motherboard", "placa madre",
+                       "gabinete", "cooler", "ventilador"],
+    "impresoras": ["impresora", "printer", "multifuncional", "scanner", "escáner"],
+}
+
+
+def _matches_category(name: str, category_lower: str) -> bool:
+    """Verifica si el nombre del producto contiene keywords de la categoría."""
+    keywords = _CAT_KEYWORDS.get(category_lower, [])
+    if not keywords:
+        return True  # Si no hay keywords definidas, aceptar todo
+    name_low = name.lower()
+    return any(kw in name_low for kw in keywords)
+
 
 def _parse_price(price_text: str) -> float:
     cleaned = price_text.replace("Q", "").replace("GTQ", "").replace(",", "").strip()
@@ -79,6 +111,8 @@ def scrape_click(category: str, brand: str) -> str:
                     vendor = product.get("vendor", "")
                     if brand_lower not in name.lower() and brand_lower not in vendor.lower():
                         continue
+                    if not _matches_category(name, category_lower):
+                        continue
                     variants = product.get("variants", [])
                     if not variants:
                         continue
@@ -95,7 +129,7 @@ def scrape_click(category: str, brand: str) -> str:
         except Exception:
             pass
 
-        # Intentar 2: colección por marca
+        # Intentar 2: colección por marca (filtrando por categoría en el nombre)
         if not products:
             try:
                 resp = requests.get(
@@ -109,6 +143,8 @@ def scrape_click(category: str, brand: str) -> str:
                         if len(products) >= MAX_PRODUCTS:
                             break
                         name = product.get("title", "")
+                        if not _matches_category(name, category_lower):
+                            continue
                         variants = product.get("variants", [])
                         if not variants:
                             continue

@@ -33,8 +33,40 @@ HEADERS = {
 
 MAX_PRODUCTS = 5
 
+# Palabras clave por categoría para validar que el producto pertenece a la categoría buscada
+_CAT_KEYWORDS = {
+    "laptops": ["laptop", "notebook", "portatil", "portátil", "inspiron", "victus",
+                "omen", "legion", "ideapad", "thinkpad", "pavilion", "aspire",
+                "rog", "tuf", "vivobook", "zenbook", "swift", "predator",
+                "alienware", "latitude", "precision", "xps"],
+    "monitores": ["monitor", "pantalla", "display"],
+    "audifonos": ["audifono", "audífono", "headset", "headphone", "earbuds",
+                  "earphone", "auricular"],
+    "bocinas": ["bocina", "parlante", "speaker", "soundbar", "subwoofer",
+                "charge", "flip", "go ", "clip", "partybox", "xtreme",
+                "pulse", "boombox"],
+    "teclados": ["teclado", "keyboard"],
+    "mouse": ["mouse", "ratón", "raton"],
+    "sillas_gamer": ["silla", "chair"],
+    "almacenamiento": ["ssd", "hdd", "disco duro", "memoria usb", "microsd",
+                       "pendrive", "nvme", "storage"],
+    "componentes_pc": ["tarjeta de video", "tarjeta gráfica", "gpu", "fuente de poder",
+                       "ram ddr", "procesador", "cpu", "motherboard", "placa madre",
+                       "gabinete", "cooler", "ventilador"],
+    "impresoras": ["impresora", "printer", "multifuncional", "scanner", "escáner"],
+}
 
-def _extract_products_from_next_data(html: str, brand_lower: str, store: str, base: str) -> list:
+
+def _matches_category(name: str, category_lower: str) -> bool:
+    """Verifica si el nombre del producto contiene keywords de la categoría."""
+    keywords = _CAT_KEYWORDS.get(category_lower, [])
+    if not keywords:
+        return True
+    name_low = name.lower()
+    return any(kw in name_low for kw in keywords)
+
+
+def _extract_products_from_next_data(html: str, brand_lower: str, category_lower: str, store: str, base: str) -> list:
     """Extrae productos del JSON __NEXT_DATA__ embebido en la página Next.js."""
     soup = BeautifulSoup(html, "html.parser")
     script = soup.find("script", id="__NEXT_DATA__")
@@ -58,6 +90,8 @@ def _extract_products_from_next_data(html: str, brand_lower: str, store: str, ba
             break
         name = product.get("title", "")
         if brand_lower not in name.lower():
+            continue
+        if not _matches_category(name, category_lower):
             continue
 
         sales_price = product.get("salesPrice") or product.get("regularPrice") or {}
@@ -110,7 +144,7 @@ def scrape_max(category: str, brand: str) -> str:
             if response.status_code != 200:
                 continue
             products = _extract_products_from_next_data(
-                response.text, brand_lower, "MAX", BASE_URL
+                response.text, brand_lower, category_lower, "MAX", BASE_URL
             )
             if products:
                 break
